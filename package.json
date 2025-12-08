@@ -46,5 +46,8 @@
     "@turf/bbox": "^7.3.0",
     "@turf/circle": "^7.3.0",
     "tailwindcss": "^4.1.17"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
