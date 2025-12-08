@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { page } from '$app/state'
 
   import { parseAnnotation } from '@allmaps/annotation'
   import {
@@ -42,9 +43,20 @@
 
   let displayCount = $state(5)
 
-  // const center: [number, number] = [51.9274, 4.46658]
-  const center: [number, number] = [52.4052, 4.8892]
-  // 5.17226,52.03191
+  const defaultCenter: [number, number] = [52.4052, 4.8892]
+
+  let center: [number, number]
+
+  const positionParam = page.url.searchParams.get('position')
+
+  if (positionParam) {
+    const positionParts = positionParam
+      .split(',')
+      .map((part) => parseFloat(part))
+    center = [positionParts[1], positionParts[0]]
+  } else {
+    center = defaultCenter
+  }
 
   const colors = [blue, purple, orange, red, pink, green, yellow]
 
