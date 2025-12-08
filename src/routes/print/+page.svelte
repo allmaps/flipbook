@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import { onMount } from 'svelte'
   import flipbookMapsJson from '$lib/assets/flipbook-maps.json'
 
@@ -60,4 +60,4 @@
     size: A4 landscape;
     margin: 0;
   }
-</style>
+</style> -->
