@@ -17,6 +17,7 @@
   import Controls from '$lib/components/Controls.svelte'
   import GlobalRadius from '$lib/components/GlobalRadius.svelte'
   import Position from '$lib/components/Position.svelte'
+  import PreviewModal from '$lib/components/PreviewModal.svelte'
 
   import type { GeoreferencedMap } from '@allmaps/annotation'
 
@@ -66,6 +67,7 @@
   let drawCircles = $state(true)
   let drawCircleRadius = $state(5)
   let linkedRadius = $state(false)
+  let showPreviewModal = $state(false)
 
   // We'll divide the A4 landscape page into 6 flipbook pages
   const pageAspectRatio = Math.sqrt(2) / 2 / (1 / 3)
@@ -223,6 +225,16 @@
     })
   }
 
+  function handlePreviewFlipbook() {
+    const activePages = pages.filter((page) => !page.deleted && page.canvas)
+    if (activePages.length === 0) return
+    showPreviewModal = true
+  }
+
+  function handleClosePreview() {
+    showPreviewModal = false
+  }
+
   let mounted = $state(false)
 
   $effect(() => {
@@ -288,6 +300,9 @@
   </div>
 
   <div class="flex flex-row gap-4 items-center justify-center">
+    <button class="underline cursor-pointer" onclick={handlePreviewFlipbook}
+      >Preview Flipbook</button
+    >
     <button class="underline cursor-pointer" onclick={handleDownloadAllPngs}
       >Download all PNGs</button
     >
@@ -335,6 +350,7 @@
               height={mapCanvasPixelHeight}
               {drawCircles}
               circleRadius={drawCircleRadius}
+              dpi={printDpi}
             />
           </div>
         </div>
@@ -370,3 +386,7 @@
     </button>
   {/if}
 </main>
+
+{#if showPreviewModal}
+  <PreviewModal {pages} onClose={handleClosePreview} />
+{/if}

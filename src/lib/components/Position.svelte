@@ -34,7 +34,9 @@
         },
         (error) => {
           console.error('Error getting position:', error)
-          alert('Could not get your current position. Please check your browser permissions.')
+          alert(
+            'Could not get your current position. Please check your browser permissions.'
+          )
         }
       )
     } else {

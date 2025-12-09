@@ -29,6 +29,7 @@
     height: number
     drawCircles: boolean
     circleRadius: number
+    dpi: number
   }
 
   let {
@@ -42,7 +43,8 @@
     width,
     height,
     drawCircles,
-    circleRadius
+    circleRadius,
+    dpi
   }: Props = $props()
 
   // let renderer = $state<CanvasRenderer>()
@@ -139,13 +141,19 @@
 <div class="w-full h-full grid grid-cols-1 grid-rows-1">
   <canvas bind:this={canvas} class="w-full h-full col-1 row-1"></canvas>
   {#if drawCircles}
+    {@const circleRadiusPixels = circleRadius * (dpi / 25.4)}
     <svg
       class="w-full h-full col-1 row-1"
       width={width + 'px'}
       height={height + 'px'}
       viewBox={`0 0 ${width} ${height}`}
     >
-      <circle cx={width / 2} cy={height / 2} r={circleRadius} fill={color} />
+      <circle
+        cx={width / 2}
+        cy={height / 2}
+        r={circleRadiusPixels}
+        fill={color}
+      />
     </svg>
   {/if}
 </div>
