@@ -1,21 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { throttle } from 'lodash-es'
 
-  import { circle as turfCircle } from '@turf/circle'
-  import { bbox as turfBbox } from '@turf/bbox'
-  import { area as turfArea } from '@turf/area'
+  import { wrap as comlinkWrap } from 'comlink'
 
-  import {
-    bboxToRectangle,
-    bboxToPolygon,
-    polygonToGeojsonPolygon
-  } from '@allmaps/stdlib'
-  import { lonLatToWebMercator } from '@allmaps/project'
-  import { Viewport } from '@allmaps/render'
-  import { CanvasRenderer } from '@allmaps/render/canvas'
-
-  import type { Bbox } from '@allmaps/types'
   import type { GeoreferencedMap } from '@allmaps/annotation'
+
+  import CanvasRenderWorker from '$lib/shared/canvas-render-worker.js?worker&inline'
+
+  import type { CanvasRenderWorkerType } from '$lib/shared/canvas-render-worker.js'
 
   type Props = {
     color: string
@@ -52,9 +45,13 @@
     circleRadius
   }: Props = $props()
 
-  let renderer = $state<CanvasRenderer>()
+  // let renderer = $state<CanvasRenderer>()
+
+  const worker = new CanvasRenderWorker()
+  const wrappedWorker = comlinkWrap<CanvasRenderWorkerType>(worker)
 
   let currentRadius = radius
+  let currentCenter: [number, number] = [center[0], center[1]]
 
   async function initialize(
     canvas: HTMLCanvasElement,
@@ -64,73 +61,73 @@
     canvas.width = width
     canvas.height = height
 
-    renderer = new CanvasRenderer(canvas)
-    await renderer.addGeoreferencedMap(map)
+    await wrappedWorker.initialize(width, height)
+    // Serialize the map to plain JSON before passing to worker
+    await wrappedWorker.addGeoreferencedMap(JSON.parse(JSON.stringify(map)))
   }
 
-  async function render(
-    renderer: CanvasRenderer,
-    width: number,
-    height: number,
-    radius: number
-  ) {
-    renderer.tileCache.clear()
-
-    const circle = turfCircle([center[1], center[0]], radius, {
-      units: 'meters',
-      steps: 64
-    })
-
-    const latLonBbox = turfBbox(circle) as Bbox
-
-    area = Math.round(
-      turfArea(polygonToGeojsonPolygon(bboxToPolygon(latLonBbox)))
+  async function render(width: number, height: number, radius: number) {
+    // Ensure center is a plain array
+    const plainCenter: [number, number] = [center[0], center[1]]
+    const imageData = await wrappedWorker.render(
+      plainCenter,
+      width,
+      height,
+      radius
     )
-
-    const sphericalMercatorBbox: Bbox = [
-      ...lonLatToWebMercator([latLonBbox[0], latLonBbox[1]]),
-      ...lonLatToWebMercator([latLonBbox[2], latLonBbox[3]])
-    ] as Bbox
-
-    const sphericalMercatorRectangle = bboxToRectangle(sphericalMercatorBbox)
-
-    const viewport = Viewport.fromSizeAndProjectedGeoPolygon(
-      [width, height],
-      [sphericalMercatorRectangle],
-      { devicePixelRatio: 1 }
-    )
-
-    await renderer.render(viewport)
     currentRadius = radius
+
+    if (canvas) {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      if (ctx) {
+        ctx.putImageData(imageData, 0, 0)
+      }
+    }
   }
+
+  const throttledRender = throttle(
+    (width: number, height: number, radius: number) => {
+      status = 'rendering'
+      render(width, height, radius)
+        .then(() => {
+          status = 'rendered'
+        })
+        .catch((error) => {
+          console.error('Render error:', error)
+          status = 'error'
+        })
+    },
+    300,
+    { leading: true, trailing: true }
+  )
 
   $effect(() => {
     if (status === 'mounted' && canvas) {
       status = 'loading'
+
       initialize(canvas, width, height)
         .then(() => {
           status = 'ready'
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error('Initialize error:', error)
           status = 'error'
         })
     }
   })
 
   $effect(() => {
+    const centerChanged =
+      center[0] !== currentCenter[0] || center[1] !== currentCenter[1]
+
     if (
-      renderer &&
-      (status === 'ready' ||
-        (status === 'rendered' && radius !== currentRadius))
+      status === 'ready' ||
+      (status === 'rendered' && (radius !== currentRadius || centerChanged))
     ) {
-      status = 'rendering'
-      render(renderer, width, height, radius)
-        .then(() => {
-          status = 'rendered'
-        })
-        .catch(() => {
-          status = 'error'
-        })
+      if (centerChanged) {
+        currentCenter = [center[0], center[1]]
+      }
+      throttledRender(width, height, radius)
     }
   })
 

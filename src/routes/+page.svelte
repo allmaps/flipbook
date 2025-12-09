@@ -15,10 +15,12 @@
 
   import Canvas from '$lib/components/Canvas.svelte'
   import Controls from '$lib/components/Controls.svelte'
+  import GlobalRadius from '$lib/components/GlobalRadius.svelte'
+  import Position from '$lib/components/Position.svelte'
 
   import type { GeoreferencedMap } from '@allmaps/annotation'
 
-  const DEFAULT_RADIUS = 500
+  const DEFAULT_RADIUS = 200
 
   type Page = {
     radius: number
@@ -39,13 +41,13 @@
   let maps = $state<GeoreferencedMap[]>([])
   let pages = $state<Page[]>([])
 
-  const fetchCount = 150
+  const fetchCount = 250
 
   let displayCount = $state(5)
 
-  const defaultCenter: [number, number] = [52.4052, 4.8892]
+  const defaultCenter: [number, number] = [52.37278, 4.90035]
 
-  let center: [number, number]
+  let center = $state<[number, number]>(defaultCenter)
 
   const positionParam = page.url.searchParams.get('position')
 
@@ -63,6 +65,7 @@
   let drawBackground = $state(true)
   let drawCircles = $state(true)
   let drawCircleRadius = $state(5)
+  let linkedRadius = $state(false)
 
   // We'll divide the A4 landscape page into 6 flipbook pages
   const pageAspectRatio = Math.sqrt(2) / 2 / (1 / 3)
@@ -75,6 +78,17 @@
 
   const mapCanvasPixelWidth = (((paperWidth / 2) * 2) / 3) * (printDpi / 25.4) // mm to inch
   const mapCanvasPixelHeight = mapCanvasPixelWidth / canvasAspectRatio
+
+  function updateUrlParams(center: [number, number]) {
+    const url = new URL(window.location.href)
+    url.searchParams.set('position', `${center[1]},${center[0]}`)
+    window.history.replaceState({}, '', url)
+  }
+
+  function handleCenterChange(newCenter: [number, number]) {
+    center = newCenter
+    updateUrlParams(newCenter)
+  }
 
   function pageFromMap(map: GeoreferencedMap, radius = DEFAULT_RADIUS): Page {
     return {
@@ -91,8 +105,11 @@
     return parts[parts.length - 1]
   }
 
-  function pngFilenameFromMapId(mapId: string): string {
+  function pngFilenameFromMapId(mapId: string, index?: number): string {
     const allmapsId = allmapsIdFromMapId(mapId)
+    if (index !== undefined) {
+      return `${index.toString().padStart(3, '0')}-map-${allmapsId}.png`
+    }
     return `map-${allmapsId}.png`
   }
 
@@ -135,7 +152,7 @@
     }
 
     const link = document.createElement('a')
-    link.download = pngFilenameFromMapId(page.map.id)
+    link.download = pngFilenameFromMapId(page.map.id, index)
     link.href = newCanvas.toDataURL('image/png')
     link.click()
   }
@@ -186,8 +203,36 @@
     displayCount += 1
   }
 
-  onMount(() => {
+  function handleSetLinearRadii() {
+    const activePages = pages.filter((page) => !page.deleted)
+    if (activePages.length === 0) return
+
+    if (activePages.length === 1) {
+      // Nothing to interpolate with single page
+      return
+    }
+
+    // Get min and max radius from first and last pages
+    const minRadius = activePages[0].radius
+    const maxRadius = activePages[activePages.length - 1].radius
+
+    // Set intermediate pages linearly
+    activePages.forEach((page, index) => {
+      const t = index / (activePages.length - 1)
+      page.radius = Math.round(minRadius + t * (maxRadius - minRadius))
+    })
+  }
+
+  let mounted = $state(false)
+
+  $effect(() => {
+    if (!mounted) return
+
     const annotationsUrl = `https://annotations.allmaps.org/maps?limit=${fetchCount}&intersects=${center.join(',')}`
+
+    // Reset pages when center changes
+    pages = []
+    maps = []
 
     fetch(annotationsUrl)
       .then((response) => response.json())
@@ -202,14 +247,20 @@
         maps = maps.slice(displayCount)
       })
   })
+
+  onMount(() => {
+    mounted = true
+  })
 </script>
 
 <main
   class="flex flex-col items-center justify-center p-4 gap-4 max-w-7xl mx-auto"
 >
-  <h1 class="text-3xl font-bold">Flipbook</h1>
+  <h1 class="text-3xl font-bold">Allmaps Flipbook Generator</h1>
 
   <div class="flex flex-col gap-4 items-center justify-center w-full max-w-2xl">
+    <Position {center} onCenterChange={handleCenterChange} />
+
     <div class="flex flex-row gap-6 items-center justify-center">
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" bind:checked={drawBackground} />
@@ -253,6 +304,11 @@
       >Restore all</button
     >
   </div>
+  <GlobalRadius
+    {linkedRadius}
+    onLinkedRadiusChange={(value) => (linkedRadius = value)}
+    onSetLinearRadii={handleSetLinearRadii}
+  />
   <ol class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 w-full gap-4">
     {#each pages.filter((page) => !page.deleted) as page, index (page.map.id)}
       {@const color = colors[index % colors.length]}
@@ -297,6 +353,8 @@
           <Controls
             disabled={page.status === 'loading' || page.status === 'rendering'}
             bind:radius={page.radius}
+            linked={linkedRadius}
+            {pages}
             ondelete={() => (page.deleted = true)}
           />
         </div>

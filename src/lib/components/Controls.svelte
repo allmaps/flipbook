@@ -2,10 +2,18 @@
   type Props = {
     radius: number
     disabled?: boolean
+    linked?: boolean
+    pages?: Array<{ radius: number; deleted: boolean }>
     ondelete: () => void
   }
 
-  let { radius = $bindable(), ondelete, disabled = false }: Props = $props()
+  let {
+    radius = $bindable(),
+    ondelete,
+    disabled = false,
+    linked = false,
+    pages
+  }: Props = $props()
   const uid = $props.id()
 
   const minRadius = 100 // 100 meters
@@ -28,7 +36,18 @@
   function handleChange(event: Event) {
     const target = event.target as HTMLInputElement
     sliderValue = parseFloat(target.value)
-    radius = sliderValueToRadius(sliderValue)
+    const newRadius = sliderValueToRadius(sliderValue)
+
+    if (linked && pages) {
+      // Update all non-deleted pages
+      pages.forEach((page) => {
+        if (!page.deleted) {
+          page.radius = newRadius
+        }
+      })
+    } else {
+      radius = newRadius
+    }
   }
 
   // Update slider value when radius changes externally
