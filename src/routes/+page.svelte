@@ -44,7 +44,7 @@
 
   const fetchCount = 250
 
-  let displayCount = $state(5)
+  let displayCount = $state(2.5)
 
   const defaultCenter: [number, number] = [52.37278, 4.90035]
 
